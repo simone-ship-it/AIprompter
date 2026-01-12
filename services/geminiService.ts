@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { OptimizedPrompt } from "../types";
+import { OptimizedPrompt, PromptOptions } from "../types";
 
 const apiKey = process.env.API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
@@ -20,7 +20,6 @@ Your goal is to write the PERFECT prompt for a specific AI Video Model.
 **OUTPUT FORMAT**:
 Return a JSON object:
 - "mainPrompt": The optimized English prompt.
-- "suggestedSettings": Resolution, FPS, Motion Scale (1-10).
 - "reasoning": Explanation in Italian of the strategy used.
 `;
 
@@ -29,17 +28,12 @@ export interface ImageInput {
   mimeType: string;
 }
 
-export interface PromptOptions {
-  isShortPrompt: boolean;
-  includeTechParams: boolean;
-}
-
 export const generateVideoPrompt = async (
   inputText: string,
   modelName: string,
   startImage?: ImageInput,
   endImage?: ImageInput,
-  options: PromptOptions = { isShortPrompt: true, includeTechParams: false }
+  options: PromptOptions = { isShortPrompt: true, includeTechParams: false, fixColorShift: true, isHighFidelity: true }
 ): Promise<OptimizedPrompt> => {
   
   if (!apiKey) {
@@ -63,14 +57,42 @@ export const generateVideoPrompt = async (
   `;
 
   // Apply User Options Constraints
+  
+  // 1. Creative Freedom vs Fidelity
+  if (options.isHighFidelity) {
+    userPromptContext += `\nCONSTRAINT: **STRICT FIDELITY**. Follow the user's description and images EXACTLY. Do NOT hallucinate new objects, characters, or major actions not specified by the user. Your job is to translate strictly, not to invent.`;
+  } else {
+    userPromptContext += `\nCONSTRAINT: **CREATIVE FREEDOM**. Use the user's input as a base inspiration, but you are free to embellish details, improve the atmosphere, add cinematic lighting, and fill in missing details to make the video viral and stunning.`;
+  }
+
+  // 2. Short Prompt vs Color Fix Logic
   if (options.isShortPrompt) {
-    userPromptContext += `\nCONSTRAINT: Keep the 'mainPrompt' CONCISE and SHORT (approx 20-40 words). Focus only on the core action and visual style. Avoid unnecessary fluff.`;
+    if (options.fixColorShift && hasImages) {
+        // Relax length constraint to allow technical keywords
+        userPromptContext += `\nCONSTRAINT: Keep the visual narrative CONCISE (20-30 words). HOWEVER, you **MUST** append the technical color fidelity keywords at the end. It is ACCEPTABLE for the total prompt to exceed 40 words to accommodate these mandatory technical terms.`;
+    } else {
+        userPromptContext += `\nCONSTRAINT: Keep the 'mainPrompt' CONCISE and SHORT (approx 20-40 words). Focus only on the core action and visual style. Avoid unnecessary fluff.`;
+    }
   } else {
     userPromptContext += `\nCONSTRAINT: Write a rich, detailed, and descriptive prompt (Long form).`;
   }
 
+  // 3. Tech Params (Context Aware)
   if (options.includeTechParams) {
-    userPromptContext += `\nCONSTRAINT: You MUST include specific TECHNICAL CAMERA PARAMETERS in the prompt (e.g., 'Shot on Arri Alexa, 35mm anamorphic lens, f/1.8 aperture, cinematic lighting'). Choose gear that fits the scene mood.`;
+    if (hasImages) {
+      // Image Aware: Reverse engineer the look
+      userPromptContext += `\nCONSTRAINT: **MATCH CAMERA VISUALS**. Analyze the provided image(s) closely. Identify the specific lens type (e.g., wide-angle, telephoto, anamorphic), depth of field (bokeh), lighting setup (soft, hard, rim light), and film stock/grain. You **MUST** include these inferred technical parameters in the prompt to ensure the video generation matches the exact aesthetic of the input image.`;
+    } else {
+      // Text Only: Generative fit
+      userPromptContext += `\nCONSTRAINT: You MUST include specific TECHNICAL CAMERA PARAMETERS in the prompt (e.g., 'Shot on Arri Alexa, 35mm anamorphic lens, f/1.8 aperture, cinematic lighting'). Choose gear that best fits the mood of the described scene.`;
+    }
+  }
+
+  // 4. Color Shift Fix
+  if (options.fixColorShift && hasImages) {
+    userPromptContext += `\nCONSTRAINT: **CRITICAL COLOR FIDELITY**. The user wants to animate an existing image and needs the video to match the original image exactly. 
+    You **MUST** include specific keywords to prevent the model from changing exposure, contrast, or color grading. 
+    **MANDATORY PHRASES TO INCLUDE**: 'unchanged raw footage', 'maintain source exposure', 'identical color grading', 'no contrast boost', 'original saturation'.`;
   }
 
   if (startImage && endImage) {
@@ -107,17 +129,9 @@ export const generateVideoPrompt = async (
     type: Type.OBJECT,
     properties: {
       mainPrompt: { type: Type.STRING, description: "The detailed English prompt." },
-      suggestedSettings: {
-        type: Type.OBJECT,
-        properties: {
-          resolution: { type: Type.STRING },
-          fps: { type: Type.STRING },
-          motionScale: { type: Type.NUMBER }
-        }
-      },
       reasoning: { type: Type.STRING, description: "Analysis in Italian." }
     },
-    required: ["mainPrompt", "suggestedSettings", "reasoning"]
+    required: ["mainPrompt", "reasoning"]
   };
 
   const makeRequest = async (model: string, useSearch: boolean) => {
@@ -138,7 +152,12 @@ export const generateVideoPrompt = async (
     const response = await makeRequest(primaryModel, true);
     const text = response.text;
     if (!text) throw new Error("No response from AI");
-    return JSON.parse(text) as OptimizedPrompt;
+    
+    const parsed = JSON.parse(text);
+    return {
+        ...parsed,
+        usedOptions: options // Include the options used for this specific generation
+    } as OptimizedPrompt;
 
   } catch (error: any) {
     // Handle Permission Denied (403) or generic errors
@@ -154,7 +173,12 @@ export const generateVideoPrompt = async (
         const fallbackResponse = await makeRequest(fallbackModel, false);
         const text = fallbackResponse.text;
         if (!text) throw new Error("No response from AI (Fallback)");
-        return JSON.parse(text) as OptimizedPrompt;
+        
+        const parsed = JSON.parse(text);
+        return {
+            ...parsed,
+            usedOptions: options
+        } as OptimizedPrompt;
       } catch (fallbackError) {
         console.error("Fallback generation failed:", fallbackError);
         throw fallbackError;

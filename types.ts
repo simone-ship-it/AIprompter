@@ -82,14 +82,17 @@ export const MODEL_CATALOG: ModelCategory[] = [
   }
 ];
 
+export interface PromptOptions {
+  isShortPrompt: boolean;
+  includeTechParams: boolean;
+  fixColorShift: boolean;
+  isHighFidelity: boolean;
+}
+
 export interface OptimizedPrompt {
   mainPrompt: string;
-  suggestedSettings: {
-    resolution: string;
-    fps: string;
-    motionScale?: number;
-  };
   reasoning: string;
+  usedOptions: PromptOptions;
 }
 
 export interface HistoryItem extends OptimizedPrompt {

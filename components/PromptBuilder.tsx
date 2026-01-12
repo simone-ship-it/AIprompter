@@ -10,7 +10,10 @@ import {
   VideoCameraIcon, 
   GlobeAltIcon,
   AdjustmentsHorizontalIcon,
-  ClockIcon
+  ClockIcon,
+  PaintBrushIcon,
+  CheckIcon,
+  ArrowsRightLeftIcon
 } from '@heroicons/react/24/solid';
 
 const PromptBuilder: React.FC = () => {
@@ -24,6 +27,8 @@ const PromptBuilder: React.FC = () => {
   // Options State
   const [isShortPrompt, setIsShortPrompt] = useState<boolean>(true);
   const [includeTechParams, setIncludeTechParams] = useState<boolean>(false);
+  const [fixColorShift, setFixColorShift] = useState<boolean>(true);
+  const [isHighFidelity, setIsHighFidelity] = useState<boolean>(true);
   
   // Image State (Start & End Frames)
   const [startImage, setStartImage] = useState<ImageInput | null>(null);
@@ -77,6 +82,12 @@ const PromptBuilder: React.FC = () => {
     }
   };
 
+  const handleSwapImages = () => {
+    const temp = startImage;
+    setStartImage(endImage);
+    setEndImage(temp);
+  };
+
   const onDragOver = (e: React.DragEvent, setDragging: (v: boolean) => void) => {
     e.preventDefault();
     e.stopPropagation();
@@ -125,7 +136,7 @@ const PromptBuilder: React.FC = () => {
         finalModelName,
         startImage || undefined,
         endImage || undefined,
-        { isShortPrompt, includeTechParams }
+        { isShortPrompt, includeTechParams, fixColorShift, isHighFidelity }
       );
       
       setResult(optimized);
@@ -203,20 +214,53 @@ const PromptBuilder: React.FC = () => {
             </div>
 
             {/* Options Row */}
-            <div className="flex items-center gap-4 pt-3 border-t border-slate-800">
+            <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-800">
+                {/* Short Prompt Option */}
                 <button 
                     onClick={() => setIsShortPrompt(!isShortPrompt)}
+                    title="Genera un prompt conciso e diretto (20-40 parole), focalizzato sull'azione principale. Ideale per test rapidi."
                     className={`flex items-center gap-2 text-xs transition-colors ${isShortPrompt ? 'text-indigo-400 font-medium' : 'text-slate-500'}`}
                 >
-                    <div className={`w-3 h-3 rounded-sm border ${isShortPrompt ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'}`}></div>
-                    Prompt Breve (Veo/Kling)
+                    <div className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-colors ${isShortPrompt ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'}`}>
+                        {isShortPrompt && <CheckIcon className="w-3 h-3 text-white stroke-[3]" />}
+                    </div>
+                    Prompt Breve
                 </button>
+
+                {/* Tech Params Option */}
                 <button 
                     onClick={() => setIncludeTechParams(!includeTechParams)}
+                    title="Include specifiche tecniche di ripresa (es. 'Shot on Arri Alexa', 'Anamorphic lens', 'Cinematic lighting') per aumentare il realismo."
                     className={`flex items-center gap-2 text-xs transition-colors ${includeTechParams ? 'text-indigo-400 font-medium' : 'text-slate-500'}`}
                 >
-                    <div className={`w-3 h-3 rounded-sm border ${includeTechParams ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'}`}></div>
-                    Parametri Tecnici
+                    <div className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-colors ${includeTechParams ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'}`}>
+                         {includeTechParams && <CheckIcon className="w-3 h-3 text-white stroke-[3]" />}
+                    </div>
+                    Tech Params
+                </button>
+
+                {/* Fix Color Shift Option */}
+                <button 
+                    onClick={() => setFixColorShift(!fixColorShift)}
+                    title="Aggiunge istruzioni rigorose per mantenere l'esposizione, il contrasto e i colori dell'immagine originale (utile per Image-to-Video)."
+                    className={`flex items-center gap-2 text-xs transition-colors ${fixColorShift ? 'text-indigo-400 font-medium' : 'text-slate-500'}`}
+                >
+                    <div className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-colors ${fixColorShift ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'}`}>
+                        {fixColorShift && <CheckIcon className="w-3 h-3 text-white stroke-[3]" />}
+                    </div>
+                    Fix Color Shift
+                </button>
+
+                {/* High Fidelity Option */}
+                <button 
+                    onClick={() => setIsHighFidelity(!isHighFidelity)}
+                    title="Attivo: Segue fedelmente la tua descrizione. Disattivato: L'AI ha più libertà creativa per inventare dettagli e migliorare la scena."
+                    className={`flex items-center gap-2 text-xs transition-colors ${isHighFidelity ? 'text-indigo-400 font-medium' : 'text-slate-500'}`}
+                >
+                    <div className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-colors ${isHighFidelity ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'}`}>
+                        {isHighFidelity && <CheckIcon className="w-3 h-3 text-white stroke-[3]" />}
+                    </div>
+                    Segui Input Fedelmente
                 </button>
             </div>
         </div>
@@ -232,58 +276,71 @@ const PromptBuilder: React.FC = () => {
         </div>
 
         {/* 3. Images (Compact Row) */}
-        <div className="grid grid-cols-2 gap-4">
-             {/* Start Frame */}
-             <div className="flex flex-col gap-1">
-                <div className="flex justify-between items-center">
-                    <label className="text-[10px] font-bold text-indigo-400 uppercase">Start Frame</label>
-                    {startImage && <button onClick={() => { setStartImage(null); if(startFileInputRef.current) startFileInputRef.current.value = ''; }} className="text-[10px] text-red-400 hover:text-red-300">Rimuovi</button>}
+        <div className="relative group">
+            <div className="grid grid-cols-2 gap-4">
+                {/* Start Frame */}
+                <div className="flex flex-col gap-1">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-indigo-400 uppercase">Start Frame <span className="text-slate-500 font-normal lowercase ml-1">(facoltativo)</span></label>
+                        {startImage && <button onClick={() => { setStartImage(null); if(startFileInputRef.current) startFileInputRef.current.value = ''; }} className="text-[10px] text-red-400 hover:text-red-300">Rimuovi</button>}
+                    </div>
+                    {!startImage ? (
+                        <div 
+                            onClick={() => startFileInputRef.current?.click()}
+                            onDragOver={(e) => onDragOver(e, setIsDraggingStart)}
+                            onDragLeave={(e) => onDragLeave(e, setIsDraggingStart)}
+                            onDrop={(e) => onDrop(e, setIsDraggingStart, setStartImage)}
+                            className={`aspect-video w-full border border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all
+                                ${isDraggingStart ? 'border-indigo-400 bg-indigo-500/10' : 'border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800'}`}
+                        >
+                            <PhotoIcon className="w-8 h-8 text-slate-600" />
+                            <span className="text-[10px] text-slate-500 mt-1">First Frame</span>
+                            <input type="file" ref={startFileInputRef} onChange={(e) => handleImageUpload(e, setStartImage)} accept="image/*" className="hidden" />
+                        </div>
+                    ) : (
+                        <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden border border-slate-700">
+                            <img src={`data:${startImage.mimeType};base64,${startImage.base64}`} className="w-full h-full object-contain" />
+                        </div>
+                    )}
                 </div>
-                {!startImage ? (
-                    <div 
-                        onClick={() => startFileInputRef.current?.click()}
-                        onDragOver={(e) => onDragOver(e, setIsDraggingStart)}
-                        onDragLeave={(e) => onDragLeave(e, setIsDraggingStart)}
-                        onDrop={(e) => onDrop(e, setIsDraggingStart, setStartImage)}
-                        className={`aspect-video w-full border border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all h-24
-                            ${isDraggingStart ? 'border-indigo-400 bg-indigo-500/10' : 'border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800'}`}
-                    >
-                        <PhotoIcon className="w-5 h-5 text-slate-600" />
-                        <span className="text-[10px] text-slate-500 mt-1">First Frame</span>
-                        <input type="file" ref={startFileInputRef} onChange={(e) => handleImageUpload(e, setStartImage)} accept="image/*" className="hidden" />
+
+                {/* End Frame */}
+                <div className="flex flex-col gap-1">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-pink-400 uppercase">End Frame <span className="text-slate-500 font-normal lowercase ml-1">(facoltativo)</span></label>
+                        {endImage && <button onClick={() => { setEndImage(null); if(endFileInputRef.current) endFileInputRef.current.value = ''; }} className="text-[10px] text-red-400 hover:text-red-300">Rimuovi</button>}
                     </div>
-                ) : (
-                    <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden border border-slate-700 h-24">
-                        <img src={`data:${startImage.mimeType};base64,${startImage.base64}`} className="w-full h-full object-contain" />
-                    </div>
-                )}
+                    {!endImage ? (
+                        <div 
+                            onClick={() => endFileInputRef.current?.click()}
+                            onDragOver={(e) => onDragOver(e, setIsDraggingEnd)}
+                            onDragLeave={(e) => onDragLeave(e, setIsDraggingEnd)}
+                            onDrop={(e) => onDrop(e, setIsDraggingEnd, setEndImage)}
+                            className={`aspect-video w-full border border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all
+                                ${isDraggingEnd ? 'border-pink-400 bg-pink-500/10' : 'border-slate-700 hover:border-pink-500/50 hover:bg-slate-800'}`}
+                        >
+                            <PhotoIcon className="w-8 h-8 text-slate-600" />
+                            <span className="text-[10px] text-slate-500 mt-1">Last Frame</span>
+                            <input type="file" ref={endFileInputRef} onChange={(e) => handleImageUpload(e, setEndImage)} accept="image/*" className="hidden" />
+                        </div>
+                    ) : (
+                        <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden border border-slate-700">
+                            <img src={`data:${endImage.mimeType};base64,${endImage.base64}`} className="w-full h-full object-contain" />
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* End Frame */}
-            <div className="flex flex-col gap-1">
-                <div className="flex justify-between items-center">
-                    <label className="text-[10px] font-bold text-pink-400 uppercase">End Frame</label>
-                    {endImage && <button onClick={() => { setEndImage(null); if(endFileInputRef.current) endFileInputRef.current.value = ''; }} className="text-[10px] text-red-400 hover:text-red-300">Rimuovi</button>}
-                </div>
-                {!endImage ? (
-                    <div 
-                        onClick={() => endFileInputRef.current?.click()}
-                        onDragOver={(e) => onDragOver(e, setIsDraggingEnd)}
-                        onDragLeave={(e) => onDragLeave(e, setIsDraggingEnd)}
-                        onDrop={(e) => onDrop(e, setIsDraggingEnd, setEndImage)}
-                        className={`aspect-video w-full border border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all h-24
-                            ${isDraggingEnd ? 'border-pink-400 bg-pink-500/10' : 'border-slate-700 hover:border-pink-500/50 hover:bg-slate-800'}`}
-                    >
-                        <PhotoIcon className="w-5 h-5 text-slate-600" />
-                        <span className="text-[10px] text-slate-500 mt-1">Last Frame</span>
-                        <input type="file" ref={endFileInputRef} onChange={(e) => handleImageUpload(e, setEndImage)} accept="image/*" className="hidden" />
-                    </div>
-                ) : (
-                    <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden border border-slate-700 h-24">
-                        <img src={`data:${endImage.mimeType};base64,${endImage.base64}`} className="w-full h-full object-contain" />
-                    </div>
-                )}
-            </div>
+            {/* Swap Button */}
+            {(startImage || endImage) && (
+                <button 
+                    onClick={handleSwapImages}
+                    className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-slate-800 border border-slate-700 p-2 rounded-full shadow-xl hover:bg-indigo-600 hover:border-indigo-500 text-slate-400 hover:text-white transition-all z-10"
+                    title="Inverti Immagini"
+                >
+                    <ArrowsRightLeftIcon className="w-4 h-4" />
+                </button>
+            )}
         </div>
 
         {/* 4. Generate Button */}
@@ -343,7 +400,9 @@ const PromptBuilder: React.FC = () => {
                                 <span className="text-xs font-mono text-indigo-400 bg-indigo-950/50 border border-indigo-900/50 px-2 py-0.5 rounded">
                                     {selectedCategoryId === 'custom' ? customModelName : selectedModelDef?.name}
                                 </span>
-                                {includeTechParams && <span className="text-[10px] text-slate-500 border border-slate-800 px-2 py-0.5 rounded-full">TECH PARAMS</span>}
+                                {result.usedOptions.includeTechParams && <span className="text-[10px] text-slate-500 border border-slate-800 px-2 py-0.5 rounded-full">TECH PARAMS</span>}
+                                {result.usedOptions.fixColorShift && <span className="text-[10px] text-pink-400 border border-pink-900/30 px-2 py-0.5 rounded-full">COLOR FIX</span>}
+                                {result.usedOptions.isHighFidelity && <span className="text-[10px] text-emerald-400 border border-emerald-900/30 px-2 py-0.5 rounded-full">STRICT</span>}
                                 <span className="text-[10px] text-green-500/80 flex items-center gap-1">
                                     <GlobeAltIcon className="w-3 h-3" /> Grounded
                                 </span>
@@ -366,8 +425,8 @@ const PromptBuilder: React.FC = () => {
                         </p>
                     </div>
 
-                    {/* Metadata Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-auto">
+                    {/* Metadata Grid - Analysis Only */}
+                    <div className="mt-auto">
                         <div className="bg-slate-800/30 rounded-lg p-5 border border-slate-800/50">
                             <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                                 <AdjustmentsHorizontalIcon className="w-3 h-3" /> Analisi AI
@@ -375,32 +434,6 @@ const PromptBuilder: React.FC = () => {
                             <p className="text-sm text-slate-300 leading-relaxed">
                                 {result.reasoning}
                             </p>
-                        </div>
-                        <div className="bg-slate-800/30 rounded-lg p-5 border border-slate-800/50">
-                            <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                <SparklesIcon className="w-3 h-3" /> Settings
-                            </h4>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <span className="block text-[10px] text-slate-500">Risoluzione</span>
-                                    <span className="text-sm font-mono text-white">{result.suggestedSettings.resolution}</span>
-                                </div>
-                                <div>
-                                    <span className="block text-[10px] text-slate-500">FPS</span>
-                                    <span className="text-sm font-mono text-white">{result.suggestedSettings.fps}</span>
-                                </div>
-                                {result.suggestedSettings.motionScale && (
-                                    <div className="col-span-2">
-                                        <span className="block text-[10px] text-slate-500">Motion Scale</span>
-                                        <div className="flex items-center gap-2">
-                                            <div className="flex-grow h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                                <div className="h-full bg-emerald-500" style={{ width: `${(result.suggestedSettings.motionScale / 10) * 100}%` }}></div>
-                                            </div>
-                                            <span className="text-xs font-mono text-white">{result.suggestedSettings.motionScale}/10</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
                         </div>
                     </div>
 
