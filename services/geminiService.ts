@@ -44,6 +44,7 @@ export const generateVideoPrompt = async (
 
   // Determine models
   const hasImages = !!(startImage || endImage);
+  const isImg2Vid = hasImages;
   
   // Primary: Use Pro models (best quality)
   const primaryModel = hasImages ? 'gemini-3-pro-image-preview' : 'gemini-3-pro-preview';
@@ -62,15 +63,31 @@ export const generateVideoPrompt = async (
   
   // KLING O1 SPECIFIC LOGIC (Ref: Higgsfield/Kling Prompt Banks)
   if (modelName.toLowerCase().includes('kling')) {
-    userPromptContext += `\nCONSTRAINT: **KLING O1 OPTIMIZATION ACTIVE**.
-    Kling models (especially O1/Pro) require a STRICT MODULAR STRUCTURE for best coherence.
-    Organize the prompt visually in this order:
-    1. **SUBJECT**: Detailed appearance of the character/object.
-    2. **ACTION**: Explicit description of movement (focus on physics, weight, inertia).
-    3. **ENVIRONMENT**: Background, depth, and texture.
-    4. **ATMOSPHERE/CAMERA**: Lighting, lens type, camera movement.
     
-    *Avoid generic words like "morphing". Describe the physical change.*`;
+    if (isImg2Vid) {
+        // --- KLING IMAGE-TO-VIDEO STRATEGY (DELTA ONLY) ---
+        userPromptContext += `\nCONSTRAINT: **KLING IMAGE-TO-VIDEO DETECTED**.
+        **CRITICAL RULES TO PREVENT ARTIFACTS AND FADES**:
+        1. **DO NOT DESCRIBE THE STATIC IMAGE**: The model already sees the start frame. Describing the static subject (e.g., "A man in a suit") causes hallucinations and double-rendering.
+        2. **FOCUS 100% ON MOTION (THE DELTA)**: Describe ONLY the movement, the change, and the physics. 
+        3. **ENFORCE CONTINUITY**: Use keywords like 'continuous motion', 'fluid transformation', 'morphing', 'dynamic action'. 
+        4. **NO CUTS**: Explicitly avoid 'fade to', 'cut to', 'scene change'. The video must be a single continuous shot.
+        
+        **STRUCTURE FOR IMG2VID**:
+        [PHYSICS & MOVEMENT DETAILS] -> [CAMERA MOVEMENT] -> [ATMOSPHERE MAINTAINED]
+        `;
+    } else {
+        // --- KLING TEXT-TO-VIDEO STRATEGY (FULL DESCRIPTION) ---
+        userPromptContext += `\nCONSTRAINT: **KLING TEXT-TO-VIDEO OPTIMIZATION**.
+        Kling requires a STRICT MODULAR STRUCTURE for best coherence from scratch.
+        Organize the prompt visually in this order:
+        1. **SUBJECT**: Detailed appearance of the character/object.
+        2. **ACTION**: Explicit description of movement (focus on physics, weight, inertia).
+        3. **ENVIRONMENT**: Background, depth, and texture.
+        4. **ATMOSPHERE/CAMERA**: Lighting, lens type, camera movement.
+        `;
+    }
+
   }
   // VEO SPECIFIC LOGIC
   else if (modelName.toLowerCase().includes('veo')) {

@@ -14,7 +14,8 @@ import {
   PaintBrushIcon,
   CheckIcon,
   ArrowsRightLeftIcon,
-  PlusIcon
+  PlusIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/solid';
 
 const PromptBuilder: React.FC = () => {
@@ -34,6 +35,9 @@ const PromptBuilder: React.FC = () => {
   // Image State (Start & End Frames)
   const [startImage, setStartImage] = useState<ImageInput | null>(null);
   const [endImage, setEndImage] = useState<ImageInput | null>(null);
+  // Aspect Ratio Warning State
+  const [startImageWarning, setStartImageWarning] = useState<boolean>(false);
+  const [endImageWarning, setEndImageWarning] = useState<boolean>(false);
 
   // Drag State
   const [isDraggingStart, setIsDraggingStart] = useState(false);
@@ -58,41 +62,64 @@ const PromptBuilder: React.FC = () => {
     }
   };
 
-  const processFile = (file: File, setImage: React.Dispatch<React.SetStateAction<ImageInput | null>>) => {
+  const processFile = (
+    file: File, 
+    setImage: React.Dispatch<React.SetStateAction<ImageInput | null>>,
+    setWarning: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
     if (!file.type.startsWith('image/')) return;
     
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64String = reader.result as string;
       const base64Data = base64String.split(',')[1];
-      setImage({
-        base64: base64Data,
-        mimeType: file.type
-      });
+
+      // Check Aspect Ratio (16:9 is approx 1.77)
+      const img = new Image();
+      img.onload = () => {
+        const ratio = img.width / img.height;
+        // Tolerance approx +/- 0.02 (e.g., 1.75 to 1.80 is considered safe)
+        const is16_9 = ratio > 1.75 && ratio < 1.80;
+        setWarning(!is16_9);
+
+        setImage({
+          base64: base64Data,
+          mimeType: file.type
+        });
+      };
+      img.src = base64String;
     };
     reader.readAsDataURL(file);
   };
 
   const handleImageUpload = (
     e: React.ChangeEvent<HTMLInputElement>, 
-    setImage: React.Dispatch<React.SetStateAction<ImageInput | null>>
+    setImage: React.Dispatch<React.SetStateAction<ImageInput | null>>,
+    setWarning: React.Dispatch<React.SetStateAction<boolean>>
   ) => {
     const file = e.target.files?.[0];
     if (file) {
-      processFile(file, setImage);
+      processFile(file, setImage, setWarning);
     }
   };
 
   const handleSwapImages = () => {
-    const temp = startImage;
+    const tempImage = startImage;
+    const tempWarning = startImageWarning;
+    
     setStartImage(endImage);
-    setEndImage(temp);
+    setStartImageWarning(endImageWarning);
+    
+    setEndImage(tempImage);
+    setEndImageWarning(tempWarning);
   };
 
   const handleNewScene = () => {
     setInputText('');
     setStartImage(null);
     setEndImage(null);
+    setStartImageWarning(false);
+    setEndImageWarning(false);
     setResult(null);
     setError(null);
     if (startFileInputRef.current) startFileInputRef.current.value = '';
@@ -114,14 +141,15 @@ const PromptBuilder: React.FC = () => {
   const onDrop = (
     e: React.DragEvent, 
     setDragging: (v: boolean) => void, 
-    setImage: React.Dispatch<React.SetStateAction<ImageInput | null>>
+    setImage: React.Dispatch<React.SetStateAction<ImageInput | null>>,
+    setWarning: React.Dispatch<React.SetStateAction<boolean>>
   ) => {
     e.preventDefault();
     e.stopPropagation();
     setDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      processFile(file, setImage);
+      processFile(file, setImage, setWarning);
     }
   };
 
@@ -293,24 +321,30 @@ const PromptBuilder: React.FC = () => {
                 <div className="flex flex-col gap-1">
                     <div className="flex justify-between items-center">
                         <label className="text-[10px] font-bold text-indigo-400 uppercase">Start Frame <span className="text-slate-500 font-normal lowercase ml-1">(facoltativo)</span></label>
-                        {startImage && <button onClick={() => { setStartImage(null); if(startFileInputRef.current) startFileInputRef.current.value = ''; }} className="text-[10px] text-red-400 hover:text-red-300">Rimuovi</button>}
+                        {startImage && <button onClick={() => { setStartImage(null); setStartImageWarning(false); if(startFileInputRef.current) startFileInputRef.current.value = ''; }} className="text-[10px] text-red-400 hover:text-red-300">Rimuovi</button>}
                     </div>
                     {!startImage ? (
                         <div 
                             onClick={() => startFileInputRef.current?.click()}
                             onDragOver={(e) => onDragOver(e, setIsDraggingStart)}
                             onDragLeave={(e) => onDragLeave(e, setIsDraggingStart)}
-                            onDrop={(e) => onDrop(e, setIsDraggingStart, setStartImage)}
+                            onDrop={(e) => onDrop(e, setIsDraggingStart, setStartImage, setStartImageWarning)}
                             className={`aspect-video w-full border border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all
                                 ${isDraggingStart ? 'border-indigo-400 bg-indigo-500/10' : 'border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800'}`}
                         >
                             <PhotoIcon className="w-8 h-8 text-slate-600" />
                             <span className="text-[10px] text-slate-500 mt-1">First Frame</span>
-                            <input type="file" ref={startFileInputRef} onChange={(e) => handleImageUpload(e, setStartImage)} accept="image/*" className="hidden" />
+                            <input type="file" ref={startFileInputRef} onChange={(e) => handleImageUpload(e, setStartImage, setStartImageWarning)} accept="image/*" className="hidden" />
                         </div>
                     ) : (
-                        <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden border border-slate-700">
+                        <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden border border-slate-700 group/image">
                             <img src={`data:${startImage.mimeType};base64,${startImage.base64}`} className="w-full h-full object-contain" />
+                            {startImageWarning && (
+                                <div className="absolute top-2 right-2 bg-yellow-500/90 text-yellow-950 px-2 py-1 rounded-md flex items-center gap-1.5 shadow-lg backdrop-blur-sm z-20">
+                                    <ExclamationTriangleIcon className="w-3.5 h-3.5" />
+                                    <span className="text-[10px] font-bold">Non 16:9</span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -319,24 +353,30 @@ const PromptBuilder: React.FC = () => {
                 <div className="flex flex-col gap-1">
                     <div className="flex justify-between items-center">
                         <label className="text-[10px] font-bold text-pink-400 uppercase">End Frame <span className="text-slate-500 font-normal lowercase ml-1">(facoltativo)</span></label>
-                        {endImage && <button onClick={() => { setEndImage(null); if(endFileInputRef.current) endFileInputRef.current.value = ''; }} className="text-[10px] text-red-400 hover:text-red-300">Rimuovi</button>}
+                        {endImage && <button onClick={() => { setEndImage(null); setEndImageWarning(false); if(endFileInputRef.current) endFileInputRef.current.value = ''; }} className="text-[10px] text-red-400 hover:text-red-300">Rimuovi</button>}
                     </div>
                     {!endImage ? (
                         <div 
                             onClick={() => endFileInputRef.current?.click()}
                             onDragOver={(e) => onDragOver(e, setIsDraggingEnd)}
                             onDragLeave={(e) => onDragLeave(e, setIsDraggingEnd)}
-                            onDrop={(e) => onDrop(e, setIsDraggingEnd, setEndImage)}
+                            onDrop={(e) => onDrop(e, setIsDraggingEnd, setEndImage, setEndImageWarning)}
                             className={`aspect-video w-full border border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all
                                 ${isDraggingEnd ? 'border-pink-400 bg-pink-500/10' : 'border-slate-700 hover:border-pink-500/50 hover:bg-slate-800'}`}
                         >
                             <PhotoIcon className="w-8 h-8 text-slate-600" />
                             <span className="text-[10px] text-slate-500 mt-1">Last Frame</span>
-                            <input type="file" ref={endFileInputRef} onChange={(e) => handleImageUpload(e, setEndImage)} accept="image/*" className="hidden" />
+                            <input type="file" ref={endFileInputRef} onChange={(e) => handleImageUpload(e, setEndImage, setEndImageWarning)} accept="image/*" className="hidden" />
                         </div>
                     ) : (
-                        <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden border border-slate-700">
+                        <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden border border-slate-700 group/image">
                             <img src={`data:${endImage.mimeType};base64,${endImage.base64}`} className="w-full h-full object-contain" />
+                            {endImageWarning && (
+                                <div className="absolute top-2 right-2 bg-yellow-500/90 text-yellow-950 px-2 py-1 rounded-md flex items-center gap-1.5 shadow-lg backdrop-blur-sm z-20">
+                                    <ExclamationTriangleIcon className="w-3.5 h-3.5" />
+                                    <span className="text-[10px] font-bold">Non 16:9</span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
