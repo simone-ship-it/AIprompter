@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { MODEL_CATALOG, OptimizedPrompt, HistoryItem } from '../types';
 import { generateVideoPrompt, ImageInput } from '../services/geminiService';
 import { 
@@ -15,7 +15,8 @@ import {
   CheckIcon,
   ArrowsRightLeftIcon,
   PlusIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  TrashIcon
 } from '@heroicons/react/24/solid';
 
 const PromptBuilder: React.FC = () => {
@@ -45,11 +46,27 @@ const PromptBuilder: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<OptimizedPrompt | null>(null);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  
+  // History State with Local Storage Initialization
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('cineprompt_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to load history", e);
+      return [];
+    }
+  });
+
   const [error, setError] = useState<string | null>(null);
 
   const startFileInputRef = useRef<HTMLInputElement>(null);
   const endFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Save history to LocalStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('cineprompt_history', JSON.stringify(history));
+  }, [history]);
 
   const selectedCategory = MODEL_CATALOG.find(c => c.id === selectedCategoryId);
   const selectedModelDef = selectedCategory?.models.find(m => m.id === selectedModelId);
@@ -126,6 +143,13 @@ const PromptBuilder: React.FC = () => {
     if (endFileInputRef.current) endFileInputRef.current.value = '';
   };
 
+  const clearHistory = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if(window.confirm("Cancellare tutta la cronologia?")) {
+        setHistory([]);
+    }
+  };
+
   const onDragOver = (e: React.DragEvent, setDragging: (v: boolean) => void) => {
     e.preventDefault();
     e.stopPropagation();
@@ -187,7 +211,8 @@ const PromptBuilder: React.FC = () => {
         timestamp: Date.now(),
         model: finalModelName
       };
-      setHistory(prev => [newHistoryItem, ...prev].slice(0, 8)); 
+      // Keep last 20 items for history
+      setHistory(prev => [newHistoryItem, ...prev].slice(0, 20)); 
 
     } catch (err: any) {
       setError(err.message || "Si è verificato un errore durante la generazione.");
@@ -438,10 +463,10 @@ const PromptBuilder: React.FC = () => {
       </div>
 
       {/* RIGHT COLUMN: Output (Prominent) */}
-      <div className="xl:col-span-7 flex flex-col gap-4 h-full">
+      <div className="xl:col-span-7 flex flex-col gap-4 h-full overflow-hidden">
         
         {/* Main Result Card */}
-        <div className="flex-grow bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-8 shadow-2xl relative overflow-hidden min-h-[500px] flex flex-col">
+        <div className="flex-shrink-0 bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-8 shadow-2xl relative overflow-hidden min-h-[400px] flex flex-col">
             
             {/* Background Decorative Elements */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none -mr-32 -mt-32"></div>
@@ -457,7 +482,7 @@ const PromptBuilder: React.FC = () => {
                 <div className="relative z-10 flex flex-col h-full animate-fade-in-up">
                     
                     {/* Header Output */}
-                    <div className="flex justify-between items-start mb-8">
+                    <div className="flex justify-between items-start mb-6">
                         <div>
                             <div className="flex items-center gap-3 mb-1">
                                 <span className="text-xs font-mono text-indigo-400 bg-indigo-950/50 border border-indigo-900/50 px-2 py-0.5 rounded">
@@ -482,19 +507,19 @@ const PromptBuilder: React.FC = () => {
                     </div>
 
                     {/* The Prompt */}
-                    <div className="bg-black/40 rounded-xl p-8 border border-slate-800 mb-8 relative group">
-                        <p className="text-slate-50 font-sans text-xl md:text-2xl leading-relaxed tracking-wide selection:bg-indigo-500/40">
+                    <div className="bg-black/40 rounded-xl p-6 border border-slate-800 mb-6 relative group overflow-y-auto max-h-[250px] custom-scrollbar">
+                        <p className="text-slate-50 font-sans text-xl leading-relaxed tracking-wide selection:bg-indigo-500/40">
                             {result.mainPrompt}
                         </p>
                     </div>
 
                     {/* Metadata Grid - Analysis Only */}
                     <div className="mt-auto">
-                        <div className="bg-slate-800/30 rounded-lg p-5 border border-slate-800/50">
-                            <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
+                            <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                                 <AdjustmentsHorizontalIcon className="w-3 h-3" /> Analisi AI
                             </h4>
-                            <p className="text-sm text-slate-300 leading-relaxed">
+                            <p className="text-sm text-slate-300 leading-relaxed line-clamp-3 hover:line-clamp-none transition-all cursor-default">
                                 {result.reasoning}
                             </p>
                         </div>
@@ -504,25 +529,38 @@ const PromptBuilder: React.FC = () => {
             )}
         </div>
 
-        {/* History Row (Compact below result) */}
+        {/* History Column (Vertical) */}
         {history.length > 0 && (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                <div className="flex items-center gap-2 text-slate-500 mb-3">
-                    <ClockIcon className="w-4 h-4" />
-                    <span className="text-xs font-bold uppercase tracking-widest">Cronologia Recente</span>
+            <div className="flex-grow min-h-0 bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col">
+                <div className="flex items-center justify-between text-slate-500 mb-3 flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                        <ClockIcon className="w-4 h-4" />
+                        <span className="text-xs font-bold uppercase tracking-widest">Cronologia Recente</span>
+                    </div>
+                    <button onClick={clearHistory} className="text-slate-600 hover:text-red-400 transition-colors" title="Cancella Cronologia">
+                        <TrashIcon className="w-4 h-4" />
+                    </button>
                 </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
+                
+                {/* Vertical Scroll List */}
+                <div className="flex flex-col gap-3 overflow-y-auto pr-2 custom-scrollbar">
                     {history.map((item) => (
                         <div 
                             key={item.id} 
                             onClick={() => setResult(item)}
-                            className="min-w-[200px] max-w-[200px] bg-slate-800/50 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/30 rounded-lg p-3 cursor-pointer transition-all flex-shrink-0"
+                            className="w-full bg-slate-800/50 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/30 rounded-lg p-4 cursor-pointer transition-all group"
                         >
-                            <div className="flex justify-between items-center mb-1">
-                                <span className="text-[10px] text-indigo-300 bg-indigo-900/20 px-1.5 rounded">{item.model}</span>
-                                <span className="text-[10px] text-slate-600">{new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-[10px] font-mono text-indigo-300 bg-indigo-900/20 px-1.5 py-0.5 rounded">{item.model}</span>
+                                <span className="text-[10px] text-slate-600 group-hover:text-slate-400 transition-colors">
+                                    {new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    <span className="mx-1">•</span>
+                                    {new Date(item.timestamp).toLocaleDateString([], {day:'2-digit', month:'2-digit'})}
+                                </span>
                             </div>
-                            <p className="text-slate-400 text-xs line-clamp-2">{item.mainPrompt}</p>
+                            <p className="text-slate-300 text-sm line-clamp-2 leading-snug group-hover:text-white transition-colors">
+                                {item.mainPrompt}
+                            </p>
                         </div>
                     ))}
                 </div>
