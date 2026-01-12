@@ -6,10 +6,12 @@ const ai = new GoogleGenAI({ apiKey });
 
 const SYSTEM_INSTRUCTION = `
 You are an elite Video Prompt Engineer. 
-Your goal is to write the PERFECT prompt for a specific AI Video Model.
+Your goal is to write the PERFECT prompt for a specific AI Video Model (Kling, Veo, Hailuo, etc.).
 
 **CRITICAL PROCESS:**
-1. **SEARCH FIRST**: Use Google Search to find the latest "prompting guide" or specs for the requested User Model.
+1. **IDENTIFY MODEL ARCHITECTURE**: Each model has a preferred "language".
+   - **Kling/Hailuo**: Prefer structured, descriptive, physics-based prompts.
+   - **Veo**: Prefers cinematic, natural language narrative.
 2. **ANALYZE IMAGES (If provided)**:
    - If a **Start Frame** is provided: Describe its style, composition, and subject.
    - If an **End Frame** is provided: Describe the target state.
@@ -53,10 +55,31 @@ export const generateVideoPrompt = async (
     Input User (Text): "${inputText}"
     Target Model: "${modelName}"
     
-    ACTION: Search for "${modelName} prompting guide" and generate the best prompt.
+    ACTION: Generate the best prompt for this model.
   `;
 
-  // Apply User Options Constraints
+  // --- MODEL SPECIFIC OPTIMIZATIONS (Based on Documentation & Blog Posts) ---
+  
+  // KLING O1 SPECIFIC LOGIC (Ref: Higgsfield/Kling Prompt Banks)
+  if (modelName.toLowerCase().includes('kling')) {
+    userPromptContext += `\nCONSTRAINT: **KLING O1 OPTIMIZATION ACTIVE**.
+    Kling models (especially O1/Pro) require a STRICT MODULAR STRUCTURE for best coherence.
+    Organize the prompt visually in this order:
+    1. **SUBJECT**: Detailed appearance of the character/object.
+    2. **ACTION**: Explicit description of movement (focus on physics, weight, inertia).
+    3. **ENVIRONMENT**: Background, depth, and texture.
+    4. **ATMOSPHERE/CAMERA**: Lighting, lens type, camera movement.
+    
+    *Avoid generic words like "morphing". Describe the physical change.*`;
+  }
+  // VEO SPECIFIC LOGIC
+  else if (modelName.toLowerCase().includes('veo')) {
+     userPromptContext += `\nCONSTRAINT: **VEO OPTIMIZATION ACTIVE**.
+     Veo prefers a natural, flowing narrative style. Focus on the "Cinematic Feel" and "Lighting". 
+     Use terms like "HDR", "Cinematic composition", "Volumetric lighting".`;
+  }
+
+  // --- USER OPTIONS CONSTRAINTS ---
   
   // 1. Creative Freedom vs Fidelity
   if (options.isHighFidelity) {
@@ -140,6 +163,8 @@ export const generateVideoPrompt = async (
       contents: { parts },
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
+        // Only use search if not falling back to models that might not support it well or if explicitly needed
+        // For this specific prompt logic, we rely more on the internal system instruction knowledge
         tools: useSearch ? [{ googleSearch: {} }] : undefined,
         responseMimeType: "application/json",
         responseSchema: responseSchema

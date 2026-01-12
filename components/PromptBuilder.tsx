@@ -13,7 +13,8 @@ import {
   ClockIcon,
   PaintBrushIcon,
   CheckIcon,
-  ArrowsRightLeftIcon
+  ArrowsRightLeftIcon,
+  PlusIcon
 } from '@heroicons/react/24/solid';
 
 const PromptBuilder: React.FC = () => {
@@ -86,6 +87,16 @@ const PromptBuilder: React.FC = () => {
     const temp = startImage;
     setStartImage(endImage);
     setEndImage(temp);
+  };
+
+  const handleNewScene = () => {
+    setInputText('');
+    setStartImage(null);
+    setEndImage(null);
+    setResult(null);
+    setError(null);
+    if (startFileInputRef.current) startFileInputRef.current.value = '';
+    if (endFileInputRef.current) endFileInputRef.current.value = '';
   };
 
   const onDragOver = (e: React.DragEvent, setDragging: (v: boolean) => void) => {
@@ -343,28 +354,40 @@ const PromptBuilder: React.FC = () => {
             )}
         </div>
 
-        {/* 4. Generate Button */}
-        <button
-            onClick={handleGenerate}
-            disabled={isLoading || (!inputText && !startImage && !endImage)}
-            className={`w-full py-4 rounded-xl font-bold text-lg text-white shadow-xl flex items-center justify-center gap-2 transition-all
-                ${isLoading || (!inputText && !startImage && !endImage)
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' 
-                : 'bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:shadow-indigo-500/30 hover:brightness-110 active:scale-[0.99]'
-                }`}
-        >
-            {isLoading ? (
-                <>
-                <ArrowPathIcon className="w-5 h-5 animate-spin" />
-                <span>Generazione...</span>
-                </>
-            ) : (
-                <>
-                <SparklesIcon className="w-5 h-5" />
-                <span>OTTIMIZZA PROMPT</span>
-                </>
-            )}
-        </button>
+        {/* 4. Action Buttons */}
+        <div className="flex gap-3">
+             {/* New Scene Button */}
+             <button
+                onClick={handleNewScene}
+                className="px-4 rounded-xl font-bold text-slate-400 bg-slate-800 border border-slate-700 hover:bg-slate-700 hover:text-white transition-all flex items-center justify-center shadow-lg active:scale-[0.98]"
+                title="Nuova Scena (Cancella tutto)"
+            >
+                <PlusIcon className="w-6 h-6" />
+            </button>
+
+            {/* Generate Button */}
+            <button
+                onClick={handleGenerate}
+                disabled={isLoading || (!inputText && !startImage && !endImage)}
+                className={`flex-grow py-4 rounded-xl font-bold text-lg text-white shadow-xl flex items-center justify-center gap-2 transition-all
+                    ${isLoading || (!inputText && !startImage && !endImage)
+                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' 
+                    : 'bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:shadow-indigo-500/30 hover:brightness-110 active:scale-[0.99]'
+                    }`}
+            >
+                {isLoading ? (
+                    <>
+                    <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                    <span>Generazione...</span>
+                    </>
+                ) : (
+                    <>
+                    <SparklesIcon className="w-5 h-5" />
+                    <span>OTTIMIZZA PROMPT</span>
+                    </>
+                )}
+            </button>
+        </div>
 
         {error && (
             <div className="p-3 bg-red-950/30 border border-red-900/50 rounded-lg text-red-300 text-xs">
