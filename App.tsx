@@ -24,7 +24,6 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-                <a href="#" className="text-xs text-slate-400 hover:text-indigo-400 transition-colors">Guide</a>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-500">
                     v1.2
                 </span>
@@ -39,6 +38,15 @@ const App: React.FC = () => {
           <PromptBuilder />
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="w-full py-3 border-t border-slate-900/50 bg-slate-950/50">
+        <div className="text-center">
+          <p className="text-[10px] text-slate-600 font-medium tracking-wide">
+            Copyright Lavezzo Studios 2026
+          </p>
+        </div>
+      </footer>
 
     </div>
   );
