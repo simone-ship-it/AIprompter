@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MODEL_CATALOG, OptimizedPrompt, HistoryItem } from '../types';
-import { generateVideoPrompt, ImageInput } from '../services/geminiService';
+import { generateVideoPrompt, refineVideoPrompt, ImageInput } from '../services/geminiService';
 import { 
   ArrowPathIcon, 
   ClipboardDocumentIcon, 
@@ -16,7 +16,9 @@ import {
   ArrowsRightLeftIcon,
   PlusIcon,
   ExclamationTriangleIcon,
-  TrashIcon
+  TrashIcon,
+  ChatBubbleLeftRightIcon,
+  PaperAirplaneIcon
 } from '@heroicons/react/24/solid';
 
 const PromptBuilder: React.FC = () => {
@@ -45,7 +47,9 @@ const PromptBuilder: React.FC = () => {
   const [isDraggingEnd, setIsDraggingEnd] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefining, setIsRefining] = useState(false);
   const [result, setResult] = useState<OptimizedPrompt | null>(null);
+  const [refinementText, setRefinementText] = useState('');
   
   // History State with Local Storage Initialization
   const [history, setHistory] = useState<HistoryItem[]>(() => {
@@ -138,6 +142,7 @@ const PromptBuilder: React.FC = () => {
     setStartImageWarning(false);
     setEndImageWarning(false);
     setResult(null);
+    setRefinementText('');
     setError(null);
     if (startFileInputRef.current) startFileInputRef.current.value = '';
     if (endFileInputRef.current) endFileInputRef.current.value = '';
@@ -177,21 +182,37 @@ const PromptBuilder: React.FC = () => {
     }
   };
 
+  const getModelName = () => {
+    if (selectedCategoryId === 'custom') {
+      return customModelName.trim() || 'Unknown Model';
+    }
+    return selectedModelDef?.name || 'Unknown Model';
+  };
+
+  const addToHistory = (optimized: OptimizedPrompt) => {
+    const newHistoryItem: HistoryItem = {
+        ...optimized,
+        id: Date.now().toString(),
+        originalInput: inputText || '(Image Analysis)',
+        timestamp: Date.now(),
+        model: getModelName()
+      };
+      setHistory(prev => [newHistoryItem, ...prev].slice(0, 20));
+  };
+
   const handleGenerate = async () => {
     if (!inputText && !startImage && !endImage) return;
 
-    let finalModelName = selectedModelDef?.name || 'Unknown Model';
-    if (selectedCategoryId === 'custom') {
-      if (!customModelName.trim()) {
+    let finalModelName = getModelName();
+    if (selectedCategoryId === 'custom' && !finalModelName) {
         setError("Inserisci il nome del modello personalizzato.");
         return;
-      }
-      finalModelName = customModelName;
     }
 
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setRefinementText('');
 
     try {
       const optimized = await generateVideoPrompt(
@@ -203,21 +224,37 @@ const PromptBuilder: React.FC = () => {
       );
       
       setResult(optimized);
-      
-      const newHistoryItem: HistoryItem = {
-        ...optimized,
-        id: Date.now().toString(),
-        originalInput: inputText || '(Image Analysis)',
-        timestamp: Date.now(),
-        model: finalModelName
-      };
-      // Keep last 20 items for history
-      setHistory(prev => [newHistoryItem, ...prev].slice(0, 20)); 
+      addToHistory(optimized);
 
     } catch (err: any) {
       setError(err.message || "Si è verificato un errore durante la generazione.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRefine = async () => {
+    if (!result || !refinementText.trim()) return;
+
+    const finalModelName = getModelName();
+    setIsRefining(true);
+    setError(null);
+
+    try {
+        const refined = await refineVideoPrompt(
+            result.mainPrompt,
+            refinementText,
+            finalModelName
+        );
+
+        setResult(refined);
+        setRefinementText('');
+        addToHistory(refined);
+
+    } catch (err: any) {
+        setError(err.message || "Impossibile aggiornare il prompt.");
+    } finally {
+        setIsRefining(false);
     }
   };
 
@@ -507,10 +544,33 @@ const PromptBuilder: React.FC = () => {
                     </div>
 
                     {/* The Prompt */}
-                    <div className="bg-black/40 rounded-xl p-6 border border-slate-800 mb-6 relative group overflow-y-auto max-h-[250px] custom-scrollbar">
+                    <div className="bg-black/40 rounded-xl p-6 border border-slate-800 mb-6 relative group overflow-y-auto max-h-[200px] custom-scrollbar">
                         <p className="text-slate-50 font-sans text-xl leading-relaxed tracking-wide selection:bg-indigo-500/40">
                             {result.mainPrompt}
                         </p>
+                    </div>
+
+                    {/* Refinement Section (Integrated) */}
+                    <div className="mb-4 bg-slate-800/40 rounded-lg p-2 border border-slate-700/50 flex gap-2 items-center">
+                        <div className="bg-slate-700/50 p-2 rounded-md">
+                            <ChatBubbleLeftRightIcon className="w-5 h-5 text-indigo-400" />
+                        </div>
+                        <input 
+                            type="text" 
+                            value={refinementText}
+                            onChange={(e) => setRefinementText(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
+                            placeholder="Cosa vuoi modificare? (es: 'Più lento', 'Rimuovi il rosso'...)"
+                            className="flex-grow bg-transparent border-none text-sm text-slate-200 placeholder-slate-500 focus:ring-0 outline-none"
+                            disabled={isRefining}
+                        />
+                        <button 
+                            onClick={handleRefine}
+                            disabled={!refinementText.trim() || isRefining}
+                            className={`p-2 rounded-lg transition-all ${!refinementText.trim() ? 'text-slate-600' : 'text-indigo-400 hover:bg-indigo-900/30'}`}
+                        >
+                           {isRefining ? <ArrowPathIcon className="w-5 h-5 animate-spin" /> : <PaperAirplaneIcon className="w-5 h-5" />}
+                        </button>
                     </div>
 
                     {/* Metadata Grid - Analysis Only */}
@@ -519,7 +579,7 @@ const PromptBuilder: React.FC = () => {
                             <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                                 <AdjustmentsHorizontalIcon className="w-3 h-3" /> Analisi AI
                             </h4>
-                            <p className="text-sm text-slate-300 leading-relaxed line-clamp-3 hover:line-clamp-none transition-all cursor-default">
+                            <p className="text-sm text-slate-300 leading-relaxed line-clamp-2 hover:line-clamp-none transition-all cursor-default">
                                 {result.reasoning}
                             </p>
                         </div>

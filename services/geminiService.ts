@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { OptimizedPrompt, PromptOptions } from "../types";
 
-const apiKey = process.env.API_KEY || '';
+const apiKey = process.env.API_KEY || 'AIzaSyBMTS0M6_W5REGw2JU8xsEWBJxvsLP6TMc';
 const ai = new GoogleGenAI({ apiKey });
 
 const SYSTEM_INSTRUCTION = `
@@ -29,6 +29,71 @@ export interface ImageInput {
   base64: string;
   mimeType: string;
 }
+
+// Response Schema reused for consistency
+const responseSchema = {
+  type: Type.OBJECT,
+  properties: {
+    mainPrompt: { type: Type.STRING, description: "The detailed English prompt." },
+    reasoning: { type: Type.STRING, description: "Analysis in Italian." }
+  },
+  required: ["mainPrompt", "reasoning"]
+};
+
+export const refineVideoPrompt = async (
+  previousPrompt: string,
+  critique: string,
+  modelName: string
+): Promise<OptimizedPrompt> => {
+
+  if (!apiKey) {
+    throw new Error("API Key mancante.");
+  }
+
+  const refinementContext = `
+    TASK: The user is not satisfied with the generated video prompt. 
+    You must REWRITE the prompt based on their critique.
+    
+    TARGET MODEL: "${modelName}"
+    
+    ORIGINAL PROMPT:
+    "${previousPrompt}"
+    
+    USER CRITIQUE / REQUEST:
+    "${critique}"
+    
+    INSTRUCTIONS:
+    1. Analyze the critique.
+    2. Modify the ORIGINAL PROMPT to satisfy the user.
+    3. Maintain the formatting rules for the Target Model (e.g., if Kling, keep it structured; if Veo, keep it cinematic).
+    4. Provide the result in the standard JSON format.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview', // Flash is sufficient and fast for text refinement
+      contents: { parts: [{ text: refinementContext }] },
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        responseMimeType: "application/json",
+        responseSchema: responseSchema
+      }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("No response from AI for refinement");
+    
+    const parsed = JSON.parse(text);
+    return {
+        ...parsed,
+        usedOptions: { isShortPrompt: false, includeTechParams: false, fixColorShift: false, isHighFidelity: true } // Default flags for refinement
+    } as OptimizedPrompt;
+
+  } catch (error) {
+    console.error("Refinement failed:", error);
+    throw error;
+  }
+};
 
 export const generateVideoPrompt = async (
   inputText: string,
@@ -64,6 +129,20 @@ export const generateVideoPrompt = async (
   // KLING O1 SPECIFIC LOGIC (Ref: Higgsfield/Kling Prompt Banks)
   if (modelName.toLowerCase().includes('kling')) {
     
+    // --- FPV/DRONE PHYSICS FIX ---
+    // Kling defaults to stabilized horizons. We must force banking/roll for FPV.
+    const lowerInput = inputText.toLowerCase();
+    if (lowerInput.includes('fpv') || lowerInput.includes('drone') || lowerInput.includes('fly') || lowerInput.includes('orbit')) {
+        userPromptContext += `\nCONSTRAINT: **FPV/DRONE PHYSICS ENFORCEMENT**.
+        The user requested a Drone/FPV shot. Kling defaults to "stabilized" footage which looks fake for FPV.
+        **YOU MUST FIX THIS BY DESCRIBING PHYSICS:**
+        1. **FORCE HORIZON ROLL**: If turning or orbiting, explicitly describe the camera *banking* or *tilting* into the turn (e.g., "camera banks 30 degrees left", "dynamic horizon roll").
+        2. **SPEED & BLUR**: Mention 'high speed', 'motion blur at edges', 'aggressive maneuvering'.
+        3. **PROXIMITY**: Describe flying *close* to surfaces (e.g., 'skimming the ground', 'flying through gaps').
+        4. **NO STABILIZATION**: Do not use words like 'smooth', 'stable', 'cinematic glide' unless explicitly asked. Use 'shaky', 'handheld feel', 'GoPro style'.
+        `;
+    }
+
     if (isImg2Vid) {
         // --- KLING IMAGE-TO-VIDEO STRATEGY (DELTA ONLY) ---
         userPromptContext += `\nCONSTRAINT: **KLING IMAGE-TO-VIDEO DETECTED**.
@@ -164,15 +243,6 @@ export const generateVideoPrompt = async (
   }
 
   parts.push({ text: userPromptContext });
-
-  const responseSchema = {
-    type: Type.OBJECT,
-    properties: {
-      mainPrompt: { type: Type.STRING, description: "The detailed English prompt." },
-      reasoning: { type: Type.STRING, description: "Analysis in Italian." }
-    },
-    required: ["mainPrompt", "reasoning"]
-  };
 
   const makeRequest = async (model: string, useSearch: boolean) => {
     return await ai.models.generateContent({
